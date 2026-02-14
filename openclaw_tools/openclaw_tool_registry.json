@@ -1,0 +1,101 @@
+{
+  "version": "1.0",
+  "workspace": "/Users/clawbot-runner/adworker",
+  "tools": [
+    {
+      "name": "write_assets",
+      "description": "Write agent outputs into run_dir (storyboard/script/subtitles/voiceover/metadata) and optionally download assets.",
+      "exec": "/usr/bin/python3 /Users/clawbot-runner/adworker/openclaw_tools/write_assets_tool.py",
+      "input_schema": {
+        "type": "object",
+        "required": ["run_dir", "payload"],
+        "properties": {
+          "run_dir": {"type": "string", "description": "Run folder, e.g. runs/run_001"},
+          "payload": {
+            "type": "object",
+            "description": "Agent output payload",
+            "properties": {
+              "storyboard": {"type": "object"},
+              "script_md": {"type": "string"},
+              "subtitles_srt": {"type": "string"},
+              "voiceover_txt": {"type": "string"},
+              "metadata": {"type": "object"},
+              "assets": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "url": {"type": "string"},
+                    "path": {"type": "string"}
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "status": {"type": "string", "enum": ["success", "error"]},
+          "stdout": {"type": "string"},
+          "stderr": {"type": "string"},
+          "cmd": {"type": "string"}
+        }
+      }
+    },
+    {
+      "name": "make_ad_video",
+      "description": "Build final ad video from run_dir/storyboard.json (+ optional subtitles and voiceover).",
+      "exec": "/usr/bin/python3 /Users/clawbot-runner/adworker/openclaw_tools/make_ad_video_tool.py",
+      "input_schema": {
+        "type": "object",
+        "required": ["run_dir"],
+        "properties": {
+          "run_dir": {"type": "string", "description": "Run folder, e.g. runs/run_001"}
+        }
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "status": {"type": "string", "enum": ["success", "error"]},
+          "stdout": {"type": "string"},
+          "stderr": {"type": "string"},
+          "cmd": {"type": "string"}
+        }
+      }
+    },
+    {
+      "name": "publish_youtube",
+      "description": "Upload a generated video to YouTube with title/description/tags/privacy.",
+      "exec": "/usr/bin/python3 /Users/clawbot-runner/adworker/openclaw_tools/publish_youtube_tool.py",
+      "input_schema": {
+        "type": "object",
+        "required": ["video_path", "metadata", "run_dir"],
+        "properties": {
+          "video_path": {"type": "string", "description": "Path to final.mp4"},
+          "run_dir": {"type": "string", "description": "Run folder for audit logging"},
+          "metadata": {
+            "type": "object",
+            "required": ["title", "description"],
+            "properties": {
+              "title": {"type": "string"},
+              "description": {"type": "string"},
+              "tags": {"type": "array", "items": {"type": "string"}},
+              "privacy": {"type": "string", "enum": ["private", "unlisted", "public"]}
+            }
+          }
+        }
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "status": {"type": "string", "enum": ["success", "error"]},
+          "stdout": {"type": "string"},
+          "stderr": {"type": "string"},
+          "cmd": {"type": "string"}
+        }
+      }
+    }
+  ]
+}
