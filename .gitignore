@@ -1,5 +1,5 @@
-# macOS
-.DS_Store
+# 环境配置（包含敏感信息）
+.env
 
 # Python
 __pycache__/
@@ -7,27 +7,20 @@ __pycache__/
 *$py.class
 *.so
 .Python
-env/
 venv/
-.venv
+env/
 
-# Credentials & Secrets
-client_secrets.json
-*.json.bak
-.env
-.env.local
-
-# Runtime data
+# 运行数据
 runs/
+
+# 系统文件
+.DS_Store
 
 # IDE
 .vscode/
 .idea/
 *.swp
-*.swo
-*~
 
-# Build outputs
-dist/
-build/
-*.egg-info/
+# 测试文件
+test_*.mp4
+test_*.jpg

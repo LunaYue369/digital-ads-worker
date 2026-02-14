@@ -4,31 +4,26 @@ import { spawn } from "child_process";
 const PYTHON = "/usr/bin/python3";
 const ROOT = "/Users/clawbot-runner/adworker";
 
-const TOOLS = {
-  write_assets: `${ROOT}/openclaw_tools/write_assets_tool.py`,
-  make_ad_video: `${ROOT}/openclaw_tools/make_ad_video_tool.py`,
-  publish_youtube: `${ROOT}/openclaw_tools/publish_youtube_tool.py`,
-} as const;
-
-function truncate(text: unknown, max = 800): string {
-  const s = typeof text === "string" ? text : String(text ?? "");
-  return s.length > max ? `${s.slice(0, max)}...` : s;
-}
-
-async function runJsonTool(toolPath: string, payload: unknown, timeoutMs = 20 * 60 * 1000): Promise<any> {
+async function runPythonScript(
+  scriptPath: string,
+  args: string[],
+  timeoutMs = 10 * 60 * 1000
+): Promise<{ exitCode: number; stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
-    const child = spawn(PYTHON, [toolPath], { stdio: ["pipe", "pipe", "pipe"] });
+    const child = spawn(PYTHON, [scriptPath, ...args], { cwd: ROOT });
 
     let stdout = "";
     let stderr = "";
+
     const timer = setTimeout(() => {
       child.kill("SIGKILL");
-      reject(new Error(`Tool timed out after ${timeoutMs}ms`));
+      reject(new Error(`Script timed out after ${timeoutMs}ms`));
     }, timeoutMs);
 
     child.stdout.on("data", (chunk) => {
       stdout += String(chunk);
     });
+
     child.stderr.on("data", (chunk) => {
       stderr += String(chunk);
     });
@@ -38,111 +33,146 @@ async function runJsonTool(toolPath: string, payload: unknown, timeoutMs = 20 * 
       reject(err);
     });
 
-    child.on("close", (code) => {
+    child.on("close", (exitCode) => {
       clearTimeout(timer);
-      const raw = stdout.trim();
-      if (!raw) {
-        reject(new Error(`Tool returned empty stdout (code=${code}) stderr=${truncate(stderr, 1200)}`));
-        return;
-      }
-      try {
-        const parsed = JSON.parse(raw);
-        resolve(parsed);
-      } catch {
-        reject(new Error(`Tool stdout is not valid JSON (code=${code}) stdout=${truncate(raw, 1200)} stderr=${truncate(stderr, 1200)}`));
-      }
+      resolve({ exitCode, stdout, stderr });
     });
-
-    child.stdin.write(JSON.stringify(payload));
-    child.stdin.end();
   });
 }
 
-function summarize(result: any) {
-  return {
-    status: result?.status ?? "error",
-    cmd: result?.cmd ?? "",
-    stdout_preview: truncate(result?.stdout, 1200),
-    stderr_preview: truncate(result?.stderr, 1200),
-  };
-}
-
 export default function register(api: any) {
-  api.registerTool(
-    {
-      name: "write_assets",
-      description: "Write agent outputs into run_dir (storyboard/script/subtitles/voiceover/metadata) and optionally download assets.",
-      parameters: {
-        type: "object",
-        required: ["run_dir", "payload"],
-        properties: {
-          run_dir: { type: "string", description: "Run folder, e.g. runs/run_001" },
-          payload: { type: "object", description: "Agent output payload object" },
+  // ========================================================================
+  // write_assets 工具：写入inputs.json
+  // ========================================================================
+  api.registerTool({
+    name: "write_assets",
+    description: "将用户需求写入inputs.json到运行目录",
+    parameters: {
+      type: "object",
+      required: ["run_dir", "inputs"],
+      properties: {
+        run_dir: {
+          type: "string",
+          description: "运行目录路径，例如: runs/20260213_150000",
         },
-      },
-      async execute(_toolCallId: string, params: any) {
-        const result = await runJsonTool(TOOLS.write_assets, params);
-        const info = summarize(result);
-        return {
-          content: [{ type: "text", text: JSON.stringify(info) }],
-          details: info,
-        };
-      },
-    },
-  );
-
-  api.registerTool(
-    {
-      name: "make_ad_video",
-      description: "Build ad video from run_dir/storyboard.json (+ optional subtitles and voiceover).",
-      parameters: {
-        type: "object",
-        required: ["run_dir"],
-        properties: {
-          run_dir: { type: "string", description: "Run folder, e.g. runs/run_001" },
-        },
-      },
-      async execute(_toolCallId: string, params: any) {
-        const result = await runJsonTool(TOOLS.make_ad_video, params, 60 * 60 * 1000);
-        const info = summarize(result);
-        return {
-          content: [{ type: "text", text: JSON.stringify(info) }],
-          details: info,
-        };
-      },
-    },
-  );
-
-  api.registerTool(
-    {
-      name: "publish_youtube",
-      description: "Upload a video to YouTube with metadata.",
-      parameters: {
-        type: "object",
-        required: ["video_path", "run_dir", "metadata"],
-        properties: {
-          video_path: { type: "string", description: "Path to final.mp4" },
-          run_dir: { type: "string", description: "Run folder for audit logging" },
-          metadata: {
-            type: "object",
-            required: ["title", "description"],
-            properties: {
-              title: { type: "string" },
-              description: { type: "string" },
-              tags: { type: "array", items: { type: "string" } },
-              privacy: { type: "string", enum: ["private", "unlisted", "public"] },
+        inputs: {
+          type: "object",
+          description: "广告需求信息",
+          properties: {
+            product_name: { type: "string", description: "产品名称" },
+            target_audience: { type: "string", description: "目标受众" },
+            key_benefits: {
+              type: "array",
+              items: { type: "string" },
+              description: "核心卖点",
             },
+            brand_tone: {
+              type: "string",
+              description: "品牌调性: energetic/professional/playful/serious",
+            },
+            length_seconds: {
+              type: "number",
+              description: "视频时长（秒），最多12秒",
+            },
+            offer: { type: "string", description: "促销信息（可选）" },
           },
         },
       },
-      async execute(_toolCallId: string, params: any) {
-        const result = await runJsonTool(TOOLS.publish_youtube, params, 60 * 60 * 1000);
-        const info = summarize(result);
+    },
+    async execute(_toolCallId: string, params: any) {
+      const { run_dir, inputs } = params;
+
+      try {
+        const result = await runPythonScript(
+          `${ROOT}/tools/write_assets.py`,
+          ["--run", run_dir, "--inputs", JSON.stringify(inputs)],
+          30000 // 30秒超时
+        );
+
+        if (result.exitCode !== 0) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `❌ 写入失败:\n${result.stderr || result.stdout}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+
         return {
-          content: [{ type: "text", text: JSON.stringify(info) }],
-          details: info,
+          content: [
+            {
+              type: "text",
+              text: `✅ 已写入 inputs.json 到 ${run_dir}\n${result.stdout}`,
+            },
+          ],
         };
+      } catch (error) {
+        return {
+          content: [{ type: "text", text: `❌ 错误: ${error.message}` }],
+          isError: true,
+        };
+      }
+    },
+  });
+
+  // ========================================================================
+  // make_ad_video 工具：生成AI视频
+  // ========================================================================
+  api.registerTool({
+    name: "make_ad_video",
+    description:
+      "使用Seedance AI从文字描述生成广告视频（2-12秒，无需拼接）",
+    parameters: {
+      type: "object",
+      required: ["run_dir"],
+      properties: {
+        run_dir: {
+          type: "string",
+          description: "运行目录路径（必须包含inputs.json）",
+        },
       },
     },
-  );
+    async execute(_toolCallId: string, params: any) {
+      const { run_dir } = params;
+
+      try {
+        console.log(`\n🚀 开始生成AI视频: ${run_dir}`);
+
+        const result = await runPythonScript(
+          `${ROOT}/tools/make_ad_video.py`,
+          [run_dir],
+          10 * 60 * 1000 // 10分钟超时
+        );
+
+        if (result.exitCode !== 0) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `❌ 视频生成失败:\n${result.stderr || result.stdout}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: `✅ 视频生成完成!\n\n${result.stdout}\n\n视频路径: ${run_dir}/final.mp4`,
+            },
+          ],
+        };
+      } catch (error) {
+        return {
+          content: [{ type: "text", text: `❌ 错误: ${error.message}` }],
+          isError: true,
+        };
+      }
+    },
+  });
 }
