@@ -1,0 +1,11 @@
+{
+  "id": "adworker-tools",
+  "name": "adworker-tools",
+  "description": "Expose adworker wrappers as OpenClaw agent tools.",
+  "version": "0.1.0",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  }
+}

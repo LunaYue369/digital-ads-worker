@@ -1,0 +1,10 @@
+{
+  "product_name": "Acme Widget",
+  "target_audience": "young professionals, 25-35",
+  "key_benefits": ["fast","reliable","affordable"],
+  "offer": "20% off for first-time buyers",
+  "brand_tone": "energetic",
+  "platform": "youtube",
+  "length_seconds": 30,
+  "constraints": {"must_include": "safety disclaimer", "forbidden_words": ["guarantee"]}
+}

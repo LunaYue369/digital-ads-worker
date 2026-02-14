@@ -1,0 +1,29 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Ad Storyboard",
+  "type": "object",
+  "required": ["run_id", "shots"],
+  "properties": {
+    "run_id": {"type": "string"},
+    "title": {"type": "string"},
+    "shots": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "type", "duration"],
+        "properties": {
+          "id": {"type": "string"},
+          "type": {"type": "string", "enum": ["image", "video", "text"]},
+          "source": {"type": "string"},
+          "path": {"type": "string"},
+          "duration": {"type": "number"},
+          "text_overlay": {"type": "string"},
+          "transition": {"type": "string"},
+          "notes": {"type": "string"}
+        }
+      }
+    },
+    "voiceover": {"type": "object", "properties": {"text_path": {"type": "string"}, "audio_path": {"type": "string"}}},
+    "metadata": {"type": "object"}
+  }
+}
