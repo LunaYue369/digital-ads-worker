@@ -1,89 +1,155 @@
 #!/usr/bin/env python3
 """
-Minimal Producer script for MVP.
-Usage: python tools/make_ad_video.py /path/to/run_dir
+AI广告视频生成器 - 火山引擎 Seedance
+纯文字生成视频，无需拼接
 
-Expectations:
-- `run_dir/storyboard.json` exists following schema/schema
-- optional `run_dir/voiceover.mp3` or `run_dir/voiceover.wav`
-- optional `run_dir/subtitles.srt`
+Usage:
+    python tools/make_ad_video.py <run_dir>
+
+要求:
+    - run_dir/inputs.json 包含广告需求
+    - .env 文件中配置 VOLCENGINE_API_KEY
 """
 import json
-import shutil
-import subprocess
+import os
 import sys
 from pathlib import Path
+from dotenv import load_dotenv
+
+# 加载.env文件
+load_dotenv()
+
+# 导入 Seedance 客户端
+from seedance_client import SeedanceClient
 
 
-def run(cmd):
-    print('RUN:', ' '.join(cmd))
-    subprocess.check_call(cmd)
+def generate_prompt_from_inputs(inputs: dict) -> str:
+    """
+    从inputs.json生成视频生成的prompt
 
+    Args:
+        inputs: 包含产品信息、受众、卖点等
 
-def make_segment_from_image(img_path: Path, duration: float, out_path: Path):
-    # create a short video from an image
-    run(["ffmpeg", "-y", "-loop", "1", "-i", str(img_path), "-t", str(duration), "-vf", "scale=1280:720,format=yuv420p", "-pix_fmt", "yuv420p", str(out_path)])
+    Returns:
+        适合Seedance生成的完整prompt
+    """
+    product = inputs.get('product_name', '产品')
+    audience = inputs.get('target_audience', '目标用户')
+    benefits = inputs.get('key_benefits', [])
+    tone = inputs.get('brand_tone', 'professional')
+    offer = inputs.get('offer', '')
 
+    # 构建prompt
+    prompt_parts = []
 
-def trim_video(src: Path, duration: float, out_path: Path):
-    run(["ffmpeg", "-y", "-ss", "0", "-i", str(src), "-t", str(duration), "-c", "copy", str(out_path)])
+    # 开场
+    prompt_parts.append(f"{product}广告视频")
 
+    # 核心卖点
+    if benefits:
+        benefits_str = '、'.join(benefits[:3])  # 最多3个卖点
+        prompt_parts.append(f"展示{benefits_str}")
 
-def concat_segments(list_file: Path, out_path: Path):
-    run(["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", str(list_file), "-c", "copy", str(out_path)])
+    # 使用场景
+    if '年轻' in audience or '专业' in audience:
+        prompt_parts.append("现代都市背景")
 
+    # 品牌调性映射到视觉风格
+    tone_mapping = {
+        'energetic': '动感活力，快节奏剪辑',
+        'professional': '专业高端，稳定镜头',
+        'playful': '轻松有趣，色彩明亮',
+        'serious': '严肃正式，商务风格'
+    }
+    style = tone_mapping.get(tone, '简洁大气')
+    prompt_parts.append(style)
 
-def burn_subtitles(in_video: Path, subs: Path, out_video: Path):
-    run(["ffmpeg", "-y", "-i", str(in_video), "-vf", f"subtitles={str(subs)}", "-c:a", "copy", str(out_video)])
+    # 促销信息
+    if offer:
+        prompt_parts.append(f"画面中展示促销信息: {offer}")
+
+    # 结尾
+    prompt_parts.append("结尾展示品牌logo")
+
+    # 合并成完整prompt
+    full_prompt = '，'.join(prompt_parts) + '。'
+
+    return full_prompt
 
 
 def main():
-    run_dir = Path(sys.argv[1]) if len(sys.argv) > 1 else Path('.').resolve()
-    storyboard = json.loads((run_dir / 'storyboard.json').read_text())
-    tmp = run_dir / 'render'
-    if tmp.exists():
-        shutil.rmtree(tmp)
-    tmp.mkdir(parents=True)
+    """主流程"""
 
-    segment_paths = []
-    for i, shot in enumerate(storyboard.get('shots', [])):
-        typ = shot.get('type')
-        dur = float(shot.get('duration', 2))
-        src = run_dir / shot.get('path') if shot.get('path') else None
-        out_seg = tmp / f'seg_{i:03d}.mp4'
-        if typ == 'image' and src and src.exists():
-            make_segment_from_image(src, dur, out_seg)
-        elif typ == 'video' and src and src.exists():
-            trim_video(src, dur, out_seg)
-        else:
-            # fallback: generate a blank clip with text (not implemented)
-            make_segment_from_image(src if src and src.exists() else Path(__file__).parent / 'placeholder.png', dur, out_seg)
-        segment_paths.append(out_seg)
+    # 参数解析
+    if len(sys.argv) < 2:
+        print("用法: python make_ad_video.py <run_dir>")
+        sys.exit(1)
 
-    # write concat list
-    list_file = tmp / 'concat.txt'
-    with list_file.open('w') as f:
-        for p in segment_paths:
-            f.write(f"file '{p}'\n")
+    run_dir = Path(sys.argv[1])
 
-    interim = tmp / 'interim.mp4'
-    concat_segments(list_file, interim)
+    if not run_dir.exists():
+        print(f"❌ 错误: 运行目录不存在: {run_dir}")
+        sys.exit(1)
 
-    final = run_dir / 'final.mp4'
-    subs = run_dir / 'subtitles.srt'
-    if subs.exists():
-        burn_subtitles(interim, subs, final)
-    else:
-        shutil.move(str(interim), str(final))
+    print(f"\n{'='*60}")
+    print("🎬 AI广告视频生成器 - Powered by Seedance")
+    print(f"{'='*60}\n")
 
-    # optional: mix voiceover (naive replacement if present)
-    voice = run_dir / 'voiceover.mp3'
-    if voice.exists():
-        mixed = run_dir / 'final_with_audio.mp4'
-        run(["ffmpeg", "-y", "-i", str(final), "-i", str(voice), "-c:v", "copy", "-map", "0:v:0", "-map", "1:a:0", str(mixed)])
-        mixed.replace(final)
+    # 读取inputs.json
+    inputs_path = run_dir / 'inputs.json'
+    if not inputs_path.exists():
+        print(f"❌ 错误: 找不到 {inputs_path}")
+        sys.exit(1)
 
-    print('Output:', final)
+    inputs = json.loads(inputs_path.read_text(encoding='utf-8'))
+    print(f"📋 产品: {inputs.get('product_name', 'N/A')}")
+    print(f"🎯 受众: {inputs.get('target_audience', 'N/A')}")
+    print(f"⏱️  时长: {inputs.get('length_seconds', 12)}秒\n")
+
+    # 生成prompt
+    prompt = generate_prompt_from_inputs(inputs)
+    print(f"📝 生成提示词:")
+    print(f"   {prompt}\n")
+
+    # 检查API Key
+    api_key = os.getenv('VOLCENGINE_API_KEY')
+    if not api_key:
+        print("❌ 错误: 未配置API Key")
+        print("   请在 .env 文件中设置: VOLCENGINE_API_KEY=your_key")
+        sys.exit(1)
+
+    # 初始化Seedance客户端（使用.env中的配置）
+    client = SeedanceClient(api_key=api_key)
+
+    # 生成视频
+    output_path = run_dir / 'final.mp4'
+    duration = min(inputs.get('length_seconds', 12), 12)  # 最多12秒
+
+    try:
+        print(f"🚀 开始生成视频...\n")
+
+        client.generate_video_from_text(
+            prompt=prompt,
+            output_path=output_path,
+            duration=duration,
+            timeout=300  # 5分钟超时
+        )
+
+        print(f"\n{'='*60}")
+        print("✅ 视频生成完成!")
+        print(f"{'='*60}")
+        print(f"📹 输出路径: {output_path}")
+
+        file_size = output_path.stat().st_size / (1024 * 1024)
+        print(f"📊 文件大小: {file_size:.2f} MB")
+        print(f"⏱️  视频时长: {duration}秒")
+        print(f"{'='*60}\n")
+
+    except Exception as e:
+        print(f"\n❌ 视频生成失败: {e}")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
 
 
 if __name__ == '__main__':
