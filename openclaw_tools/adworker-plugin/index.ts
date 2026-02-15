@@ -42,108 +42,56 @@ async function runPythonScript(
 
 export default function register(api: any) {
   // ========================================================================
-  // write_assets 工具：写入inputs.json
-  // ========================================================================
-  api.registerTool({
-    name: "write_assets",
-    description: "将用户需求写入inputs.json到运行目录",
-    parameters: {
-      type: "object",
-      required: ["run_dir", "inputs"],
-      properties: {
-        run_dir: {
-          type: "string",
-          description: "运行目录路径，例如: runs/20260213_150000",
-        },
-        inputs: {
-          type: "object",
-          description: "广告需求信息",
-          properties: {
-            product_name: { type: "string", description: "产品名称" },
-            target_audience: { type: "string", description: "目标受众" },
-            key_benefits: {
-              type: "array",
-              items: { type: "string" },
-              description: "核心卖点",
-            },
-            brand_tone: {
-              type: "string",
-              description: "品牌调性: energetic/professional/playful/serious",
-            },
-            length_seconds: {
-              type: "number",
-              description: "视频时长（秒），最多12秒",
-            },
-            offer: { type: "string", description: "促销信息（可选）" },
-          },
-        },
-      },
-    },
-    async execute(_toolCallId: string, params: any) {
-      const { run_dir, inputs } = params;
-
-      try {
-        const result = await runPythonScript(
-          `${ROOT}/tools/write_assets.py`,
-          ["--run", run_dir, "--inputs", JSON.stringify(inputs)],
-          30000 // 30秒超时
-        );
-
-        if (result.exitCode !== 0) {
-          return {
-            content: [
-              {
-                type: "text",
-                text: `❌ 写入失败:\n${result.stderr || result.stdout}`,
-              },
-            ],
-            isError: true,
-          };
-        }
-
-        return {
-          content: [
-            {
-              type: "text",
-              text: `✅ 已写入 inputs.json 到 ${run_dir}\n${result.stdout}`,
-            },
-          ],
-        };
-      } catch (error) {
-        return {
-          content: [{ type: "text", text: `❌ 错误: ${error.message}` }],
-          isError: true,
-        };
-      }
-    },
-  });
-
-  // ========================================================================
   // make_ad_video 工具：生成AI视频
   // ========================================================================
   api.registerTool({
     name: "make_ad_video",
     description:
-      "使用Seedance AI从文字描述生成广告视频（2-12秒，无需拼接）",
+      "使用Seedance AI从中文prompt直接生成广告视频（2-12秒）",
     parameters: {
       type: "object",
-      required: ["run_dir"],
+      required: ["prompt"],
       properties: {
-        run_dir: {
+        prompt: {
           type: "string",
-          description: "运行目录路径（必须包含inputs.json）",
+          description:
+            "中文视频描述prompt，由clawdbot根据用户需求生成的详细画面描述",
+        },
+        duration: {
+          type: "number",
+          description: "视频时长（秒），2-12，默认12",
+        },
+        ratio: {
+          type: "string",
+          description:
+            "画面比例: 16:9/4:3/1:1/3:4/9:16/21:9，默认16:9",
+        },
+        watermark: {
+          type: "boolean",
+          description: "是否添加水印，默认false",
         },
       },
     },
     async execute(_toolCallId: string, params: any) {
-      const { run_dir } = params;
+      const { prompt, duration, ratio, watermark } = params;
 
       try {
-        console.log(`\n🚀 开始生成AI视频: ${run_dir}`);
+        console.log(`\n🚀 开始生成AI视频`);
+
+        const args = ["--prompt", prompt];
+        if (duration !== undefined) {
+          args.push("--duration", String(duration));
+        }
+        if (ratio !== undefined) {
+          args.push("--ratio", ratio);
+        }
+        if (watermark !== undefined) {
+          args.push("--watermark", String(watermark));
+        }
 
         const result = await runPythonScript(
           `${ROOT}/tools/make_ad_video.py`,
-          [run_dir],
+          args,
           10 * 60 * 1000 // 10分钟超时
         );
 
@@ -163,7 +111,7 @@ export default function register(api: any) {
           content: [
             {
               type: "text",
-              text: `✅ 视频生成完成!\n\n${result.stdout}\n\n视频路径: ${run_dir}/final.mp4`,
+              text: `✅ 视频生成完成!\n\n${result.stdout}`,
             },
           ],
         };
