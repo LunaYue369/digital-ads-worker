@@ -38,10 +38,7 @@ class SeedanceClient:
     CREATE_ENDPOINT = "/api/v3/contents/generations/tasks"
     QUERY_ENDPOINT = "/api/v3/contents/generations/tasks"  # GET /{id}
 
-    # 支持的模型
-    MODEL_PRO_FAST = "doubao-seedance-1-0-pro-fast-250528"
-    MODEL_PRO = "doubao-seedance-1-0-pro-250528"
-    MODEL_LITE = "doubao-seedance-1-0-lite-250528"
+    # 模型从 .env 的 SEEDANCE_MODEL 读取
 
     def __init__(
         self,
@@ -60,7 +57,9 @@ class SeedanceClient:
             default_ratio: 默认宽高比 (默认从.env读取DEFAULT_RATIO)
         """
         self.api_key = api_key
-        self.model = model or os.getenv('SEEDANCE_MODEL', self.MODEL_PRO_FAST)
+        self.model = model or os.getenv('SEEDANCE_MODEL')
+        if not self.model:
+            raise ValueError("未配置模型，请在 .env 中设置 SEEDANCE_MODEL")
         self.default_resolution = default_resolution or os.getenv('DEFAULT_RESOLUTION', '720p')
         self.default_ratio = default_ratio or os.getenv('DEFAULT_RATIO', '16:9')
 
@@ -362,10 +361,11 @@ class SeedanceClient:
         duration: int = 5,
         resolution: str = None,
         ratio: str = None,
+        watermark: bool = False,
         timeout: int = 300
     ) -> Path:
         """
-        从文本生成视频（文生视频 t2v）
+        从文本生成视频（文生视频 t2v
 
         Args:
             prompt: 视频生成提示词
@@ -373,6 +373,7 @@ class SeedanceClient:
             duration: 视频时长（秒），2-12秒
             resolution: 分辨率
             ratio: 宽高比
+            watermark: 是否添加水印
             timeout: 最大等待时间（秒）
 
         Returns:
@@ -398,7 +399,7 @@ class SeedanceClient:
             duration=duration,
             resolution=resolution,
             ratio=ratio,
-            watermark=False
+            watermark=watermark
         )
 
         # 2. 等待完成
