@@ -123,4 +123,92 @@ export default function register(api: any) {
       }
     },
   });
+
+  // ========================================================================
+  // publish_youtube 工具：发布视频到YouTube
+  // ========================================================================
+  api.registerTool({
+    name: "publish_youtube",
+    description:
+      "将生成的广告视频发布到YouTube（通过YouTube Data API直接上传）",
+    parameters: {
+      type: "object",
+      required: ["video_path", "title"],
+      properties: {
+        video_path: {
+          type: "string",
+          description:
+            "视频文件路径，通常是 runs/{timestamp}/final.mp4",
+        },
+        title: {
+          type: "string",
+          description: "YouTube视频标题",
+        },
+        description: {
+          type: "string",
+          description: "YouTube视频描述",
+        },
+        tags: {
+          type: "string",
+          description: "标签，逗号分隔，如: coffee,ad,ai",
+        },
+        privacy: {
+          type: "string",
+          enum: ["private", "unlisted", "public"],
+          description:
+            "隐私级别: private(私密)/unlisted(不公开)/public(公开)，默认private",
+        },
+      },
+    },
+    async execute(_toolCallId: string, params: any) {
+      const { video_path, title, description, tags, privacy } = params;
+
+      try {
+        console.log(`\n📤 发布视频到YouTube`);
+
+        const args = ["--video_path", video_path, "--title", title];
+        if (description !== undefined) {
+          args.push("--description", description);
+        }
+        if (tags !== undefined) {
+          args.push("--tags", tags);
+        }
+        if (privacy !== undefined) {
+          args.push("--privacy", privacy);
+        }
+
+        const result = await runPythonScript(
+          `${ROOT}/tools/publish_youtube.py`,
+          args,
+          5 * 60 * 1000 // 5分钟超时
+        );
+
+        if (result.exitCode !== 0) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `❌ YouTube发布失败:\n${result.stderr || result.stdout}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: `✅ YouTube发布完成!\n\n${result.stdout}`,
+            },
+          ],
+        };
+      } catch (error) {
+        return {
+          content: [{ type: "text", text: `❌ 错误: ${error.message}` }],
+          isError: true,
+        };
+      }
+    },
+  });
 }
