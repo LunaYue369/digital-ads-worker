@@ -211,4 +211,91 @@ export default function register(api: any) {
       }
     },
   });
+
+  // ========================================================================
+  // publish_reddit 工具：发布视频到Reddit（浏览器自动化）
+  // ========================================================================
+  api.registerTool({
+    name: "publish_reddit",
+    description:
+      "将生成的广告视频发布到Reddit指定的subreddit（通过浏览器自动化上传）",
+    parameters: {
+      type: "object",
+      required: ["video_path", "subreddit", "title"],
+      properties: {
+        video_path: {
+          type: "string",
+          description:
+            "视频文件路径，通常是 runs/{timestamp}/final.mp4",
+        },
+        subreddit: {
+          type: "string",
+          description: "目标subreddit名称（不含r/前缀），如: videos",
+        },
+        title: {
+          type: "string",
+          description: "Reddit帖子标题",
+        },
+        flair: {
+          type: "string",
+          description: "帖子flair标签（可选，取决于subreddit设置）",
+        },
+        nsfw: {
+          type: "boolean",
+          description: "是否标记为NSFW，默认false",
+        },
+      },
+    },
+    async execute(_toolCallId: string, params: any) {
+      const { video_path, subreddit, title, flair, nsfw } = params;
+
+      try {
+        console.log(`\n📤 发布视频到Reddit r/${subreddit}`);
+
+        const args = [
+          "--video_path", video_path,
+          "--subreddit", subreddit,
+          "--title", title,
+        ];
+        if (flair !== undefined) {
+          args.push("--flair", flair);
+        }
+        if (nsfw === true) {
+          args.push("--nsfw");
+        }
+
+        const result = await runPythonScript(
+          `${ROOT}/tools/publish_reddit.py`,
+          args,
+          5 * 60 * 1000 // 5分钟超时
+        );
+
+        if (result.exitCode !== 0) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `❌ Reddit发布失败:\n${result.stderr || result.stdout}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: `✅ Reddit发布完成!\n\n${result.stdout}`,
+            },
+          ],
+        };
+      } catch (error) {
+        return {
+          content: [{ type: "text", text: `❌ 错误: ${error.message}` }],
+          isError: true,
+        };
+      }
+    },
+  });
 }
