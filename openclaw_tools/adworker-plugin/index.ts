@@ -315,20 +315,20 @@ export default function register(api: any) {
   });
 
   // ========================================================================
-  // publish_reddit 工具：发布视频到Reddit（浏览器自动化）
+  // publish_reddit 工具：发布内容到Reddit（浏览器自动化）
   // ========================================================================
   api.registerTool({
     name: "publish_reddit",
     description:
-      "将生成的广告视频发布到Reddit指定的subreddit（通过浏览器自动化上传）",
+      "发布内容到Reddit指定的subreddit（通过浏览器自动化）。支持视频/图片帖（需video_path）和纯文本帖（只需title+body）",
     parameters: {
       type: "object",
-      required: ["video_path", "subreddit", "title"],
+      required: ["subreddit", "title"],
       properties: {
         video_path: {
           type: "string",
           description:
-            "视频文件路径，通常是 runs/{timestamp}/final.mp4",
+            "媒体文件路径（视频或图片）。省略则发纯文本帖",
         },
         subreddit: {
           type: "string",
@@ -337,6 +337,11 @@ export default function register(api: any) {
         title: {
           type: "string",
           description: "Reddit帖子标题",
+        },
+        body: {
+          type: "string",
+          description:
+            "帖子正文。媒体帖时作为评论发布；纯文本帖时作为帖子正文（必填）",
         },
         flair: {
           type: "string",
@@ -349,16 +354,22 @@ export default function register(api: any) {
       },
     },
     async execute(_toolCallId: string, params: any) {
-      const { video_path, subreddit, title, flair, nsfw } = params;
+      const { video_path, subreddit, title, body, flair, nsfw } = params;
 
       try {
-        console.log(`\n📤 发布视频到Reddit r/${subreddit}`);
+        const postType = video_path ? "媒体" : "文本";
+        console.log(`\n📤 发布${postType}到Reddit r/${subreddit}`);
 
         const args = [
-          "--video_path", video_path,
           "--subreddit", subreddit,
           "--title", title,
         ];
+        if (video_path !== undefined) {
+          args.push("--video_path", video_path);
+        }
+        if (body !== undefined) {
+          args.push("--body", body);
+        }
         if (flair !== undefined) {
           args.push("--flair", flair);
         }
