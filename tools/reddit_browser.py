@@ -5,6 +5,7 @@ Uses Playwright to post videos to Reddit via browser automation.
 """
 import re
 import random
+import time
 from pathlib import Path
 from typing import Optional, List
 from playwright.sync_api import sync_playwright, Page, TimeoutError as PlaywrightTimeout
@@ -27,18 +28,45 @@ class RedditBrowser:
             self._playwright = sync_playwright().start()
             # Always use headed mode - Reddit blocks headless browsers.
             # For automated runs, use args to start minimized.
-            launch_args = []
+            launch_args = [
+                '--disable-blink-features=AutomationControlled',
+            ]
             if self.headless:
-                launch_args = ['--start-minimized']
+                launch_args.append('--start-minimized')
             self._context = self._playwright.chromium.launch_persistent_context(
                 user_data_dir=str(self.session_dir),
                 headless=False,  # Reddit blocks headless, always use headed
                 viewport={'width': 1280, 'height': 900},
                 locale='en-US',
-                slow_mo=300,
                 args=launch_args,
             )
+            # Hide webdriver flag on every new page
+            self._context.add_init_script("""
+                Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+            """)
         return self._context
+
+    # ── Human-like behavior helpers ──────────────────────────────
+
+    def _human_delay(self, min_ms: int = 300, max_ms: int = 1200):
+        """Sleep for a random human-like duration."""
+        time.sleep(random.randint(min_ms, max_ms) / 1000.0)
+
+    def _human_type(self, page: Page, locator, text: str):
+        """Type text character by character with random delays, like a human."""
+        locator.click()
+        self._human_delay(200, 500)
+        for char in text:
+            page.keyboard.type(char, delay=random.randint(30, 150))
+            # Occasional longer pause (simulates thinking/reading)
+            if random.random() < 0.05:
+                self._human_delay(300, 800)
+
+    def _human_click(self, locator):
+        """Click with a small random delay before and after, like a human."""
+        self._human_delay(200, 600)
+        locator.click()
+        self._human_delay(150, 400)
 
     def is_logged_in(self) -> bool:
         """Check if the persistent session has a valid Reddit login."""
@@ -73,8 +101,8 @@ class RedditBrowser:
         ).first
         try:
             if flair_button.is_visible(timeout=3000):
-                flair_button.click()
-                page.wait_for_timeout(800)
+                self._human_click(flair_button)
+                self._human_delay(500, 1000)
                 return True
         except (PlaywrightTimeout, Exception):
             pass
@@ -154,8 +182,7 @@ class RedditBrowser:
                 locator = page.get_by_text(flair_text, exact=False).first
             try:
                 if locator.is_visible(timeout=2000):
-                    locator.click()
-                    page.wait_for_timeout(500)
+                    self._human_click(locator)
                     return True
             except (PlaywrightTimeout, Exception):
                 continue
@@ -170,8 +197,7 @@ class RedditBrowser:
                 'button[type="submit"]'
             ).first
             if apply_btn.is_visible(timeout=2000):
-                apply_btn.click()
-                page.wait_for_timeout(500)
+                self._human_click(apply_btn)
         except (PlaywrightTimeout, Exception):
             pass
 
@@ -192,9 +218,8 @@ class RedditBrowser:
             try:
                 field = page.locator(selector).first
                 if field.is_visible(timeout=1500):
-                    field.click()
-                    field.fill(flair_text)
-                    page.wait_for_timeout(300)
+                    self._human_type(page, field, flair_text)
+                    self._human_delay(200, 500)
                     print(f"Filled editable flair field with: '{flair_text}'")
                     return True
             except (PlaywrightTimeout, Exception):
@@ -231,7 +256,7 @@ class RedditBrowser:
             else:
                 print("Flair picker opened but no options or editable field found.")
                 page.keyboard.press('Escape')
-                page.wait_for_timeout(300)
+                self._human_delay(200, 500)
                 return None
 
         # Case B: Predefined flair options exist
@@ -273,7 +298,7 @@ class RedditBrowser:
         else:
             print(f"Warning: Could not click flair '{selected}'.")
             page.keyboard.press('Escape')
-            page.wait_for_timeout(300)
+            self._human_delay(200, 500)
             return None
 
     def _detect_flair_required_error(self, page: Page) -> bool:
@@ -304,6 +329,122 @@ class RedditBrowser:
                 return f"{REDDIT_BASE}/r/{subreddit}/comments/{post_id}/"
         return current_url
 
+    # ── Comment helper ────────────────────────────────────────────
+
+    def _post_comment(self, page: Page, post_url: str, body: str) -> bool:
+        """Navigate to a post and add a comment with the given body text."""
+        print(f"Adding comment to post...")
+
+        # Always navigate to the actual post page to ensure comment box is present
+        page.goto(post_url, wait_until='domcontentloaded', timeout=30_000)
+        self._human_delay(3000, 5000)
+
+        # Scroll down to ensure the comment area is in view
+        page.evaluate('window.scrollBy(0, 400)')
+        self._human_delay(1500, 2500)
+
+        try:
+            # New Reddit uses web components (shadow DOM) for the comment composer.
+            # Playwright's visibility checks fail on these custom elements, so we
+            # use JavaScript to interact with them directly.
+            #
+            # Two-stage flow:
+            # 1. Collapsed: <faceplate-textarea-input data-testid="trigger-button">
+            #    — click to expand the editor
+            # 2. Expanded: <shreddit-composer> with <div slot="rte" contenteditable>
+            #    — the actual rich text editor to type into
+
+            # Step 1: Click the trigger to expand the comment editor.
+            # The trigger is a custom web component (faceplate-textarea-input)
+            # rendered via shadow DOM. Use JS to scroll into view and click it.
+            trigger_rect = page.evaluate('''() => {
+                const trigger = document.querySelector(
+                    'faceplate-textarea-input[data-testid="trigger-button"]'
+                );
+                if (trigger) {
+                    trigger.scrollIntoView({ behavior: "smooth", block: "center" });
+                    const r = trigger.getBoundingClientRect();
+                    return { x: r.x, y: r.y, w: r.width, h: r.height };
+                }
+                return null;
+            }''')
+            if not trigger_rect:
+                print("Warning: Could not find comment trigger button.")
+                return False
+            self._human_delay(500, 1000)
+
+            # Click the trigger at its center using mouse coordinates
+            page.mouse.click(
+                trigger_rect['x'] + trigger_rect['w'] / 2,
+                trigger_rect['y'] + trigger_rect['h'] / 2,
+            )
+            self._human_delay(2000, 3500)
+
+            # Step 2: Find the expanded comment editor and click its center.
+            # After expanding, the shreddit-composer should become visible.
+            editor_rect = page.evaluate('''() => {
+                const composers = document.querySelectorAll('shreddit-composer');
+                for (const c of composers) {
+                    if (c.offsetWidth > 0 && c.offsetHeight > 0) {
+                        const r = c.getBoundingClientRect();
+                        return { x: r.x, y: r.y, w: r.width, h: r.height };
+                    }
+                }
+                return null;
+            }''')
+            if not editor_rect:
+                print("Warning: Comment editor did not expand.")
+                return False
+
+            # Click at the center of the editor area
+            page.mouse.click(
+                editor_rect['x'] + editor_rect['w'] / 2,
+                editor_rect['y'] + editor_rect['h'] / 2,
+            )
+            self._human_delay(500, 1000)
+
+            # Step 3: Type the comment via keyboard
+            for char in body:
+                page.keyboard.type(char, delay=random.randint(30, 120))
+                if random.random() < 0.05:
+                    self._human_delay(200, 600)
+            self._human_delay(800, 1500)
+
+            # Step 4: Click the Comment submit button.
+            # Find it via JS, get its rect, then mouse-click it.
+            btn_rect = page.evaluate('''() => {
+                const btns = [...document.querySelectorAll('button')];
+                const commentBtn = btns.reverse().find(
+                    b => b.textContent.trim() === 'Comment'
+                );
+                if (commentBtn) {
+                    const r = commentBtn.getBoundingClientRect();
+                    return { x: r.x, y: r.y, w: r.width, h: r.height };
+                }
+                return null;
+            }''')
+            if btn_rect:
+                page.mouse.click(
+                    btn_rect['x'] + btn_rect['w'] / 2,
+                    btn_rect['y'] + btn_rect['h'] / 2,
+                )
+            else:
+                # Fallback: JS click
+                page.evaluate('''() => {
+                    const btns = [...document.querySelectorAll('button')];
+                    const commentBtn = btns.reverse().find(
+                        b => b.textContent.trim() === 'Comment'
+                    );
+                    if (commentBtn) commentBtn.click();
+                }''')
+            self._human_delay(3000, 5000)
+            print("Comment posted successfully.")
+            return True
+        except (PlaywrightTimeout, Exception) as e:
+            print(f"Warning: Could not post comment: {e}")
+
+        return False
+
     # ── Main posting method ─────────────────────────────────────
 
     def post_video(
@@ -311,12 +452,14 @@ class RedditBrowser:
         video_path: Path,
         subreddit: str,
         title: str,
+        body: Optional[str] = None,
         flair: Optional[str] = None,
         nsfw: bool = False,
         timeout_ms: int = 180_000,
     ) -> str:
         """
         Post a video to a Reddit subreddit.
+        If body is provided, it will be added as a comment after posting.
         Returns: URL of the created post.
         """
         video_path = Path(video_path)
@@ -336,7 +479,7 @@ class RedditBrowser:
             submit_url = f"{REDDIT_BASE}/r/{subreddit}/submit"
             print(f"Navigating to {submit_url}...")
             page.goto(submit_url, wait_until='domcontentloaded', timeout=30_000)
-            page.wait_for_timeout(2000)
+            self._human_delay(1500, 3000)  # "reading the page"
 
             # Step 2: Check if redirected to login
             if '/login' in page.url or '/register' in page.url:
@@ -346,8 +489,9 @@ class RedditBrowser:
 
             # Step 3: Select Images & Video tab
             print("Selecting video upload tab...")
-            page.locator('[role="tab"]:has-text("Images & Video")').click(timeout=10_000)
-            page.wait_for_timeout(1500)
+            tab = page.locator('[role="tab"]:has-text("Images & Video")')
+            self._human_click(tab)
+            self._human_delay(1000, 2000)
 
             # Step 4: Upload video file via the combined image+video file input
             print(f"Uploading video: {video_path.name} ({file_size_mb:.1f}MB)...")
@@ -363,11 +507,10 @@ class RedditBrowser:
             except PlaywrightTimeout:
                 pass  # Maybe it uploaded too fast
             page.locator('text=Uploading').wait_for(state='hidden', timeout=timeout_ms)
-            page.wait_for_timeout(2000)
+            self._human_delay(1500, 3000)  # "checking the preview"
             print("Video upload complete.")
-            page.wait_for_timeout(random.randint(500, 1500))
 
-            # Step 6: Enter title
+            # Step 6: Enter title (human-like typing)
             print(f"Entering title: {title}")
             title_input = page.locator(
                 'textarea[name="title"], '
@@ -375,29 +518,29 @@ class RedditBrowser:
                 '[contenteditable="true"][aria-label*="title" i], '
                 '[placeholder*="Title"]'
             ).first
-            title_input.click(timeout=10_000)
-            title_input.fill(title)
-            page.wait_for_timeout(random.randint(300, 800))
+            title_input.wait_for(state='visible', timeout=10_000)
+            self._human_type(page, title_input, title)
+            self._human_delay(500, 1200)  # "re-reading the title"
 
             # Step 7: Handle flair (auto-detect, match, or auto-select)
             print("Checking flair options...")
             selected_flair = self._handle_flair(page, flair)
-            page.wait_for_timeout(random.randint(300, 600))
+            self._human_delay(400, 900)
 
             # Step 8: Mark NSFW if needed
             if nsfw:
                 try:
                     nsfw_toggle = page.locator('button:has-text("NSFW")').first
                     if nsfw_toggle.is_visible(timeout=3000):
-                        nsfw_toggle.click()
+                        self._human_click(nsfw_toggle)
                 except (PlaywrightTimeout, Exception):
                     print("Warning: Could not set NSFW flag.")
 
             # Step 9: Click Post button
             print("Submitting post...")
-            page.wait_for_timeout(random.randint(500, 1000))
+            self._human_delay(800, 2000)  # "final review before posting"
             post_button = page.locator('button:has-text("Post")').last
-            post_button.click()
+            self._human_click(post_button)
 
             # Step 10: Wait for post creation (with flair-required retry)
             print("Waiting for post to be created...")
@@ -410,11 +553,12 @@ class RedditBrowser:
                 # Post didn't go through — check if flair is required
                 if not selected_flair and self._detect_flair_required_error(page):
                     print("Flair is required! Attempting to auto-select flair...")
+                    self._human_delay(500, 1200)
                     retry_flair = self._handle_flair(page, flair)
                     if retry_flair:
-                        page.wait_for_timeout(random.randint(500, 1000))
+                        self._human_delay(600, 1500)
                         post_button = page.locator('button:has-text("Post")').last
-                        post_button.click()
+                        self._human_click(post_button)
                         page.wait_for_url(
                             lambda url: '/comments/' in url or 'created=' in url,
                             timeout=60_000
@@ -432,10 +576,165 @@ class RedditBrowser:
 
             post_url = self._extract_post_url(page, subreddit)
             print(f"Post created: {post_url}")
+
+            # Add body text as a comment if provided
+            if body:
+                self._human_delay(1000, 2000)
+                self._post_comment(page, post_url, body)
+
             return post_url
 
         except PlaywrightTimeout as e:
             # Take screenshot for debugging
+            screenshot_path = self.session_dir / 'error_screenshot.png'
+            try:
+                page.screenshot(path=str(screenshot_path))
+                print(f"Error screenshot saved: {screenshot_path}")
+            except Exception:
+                pass
+            raise RuntimeError(f"Timeout during Reddit posting: {e}")
+        finally:
+            page.close()
+
+    def post_text(
+        self,
+        subreddit: str,
+        title: str,
+        body: str,
+        flair: Optional[str] = None,
+        nsfw: bool = False,
+    ) -> str:
+        """
+        Post a text-only post to a Reddit subreddit.
+        Returns: URL of the created post.
+        """
+        context = self._ensure_browser()
+        page = context.new_page()
+
+        try:
+            # Step 1: Navigate to subreddit submit page
+            submit_url = f"{REDDIT_BASE}/r/{subreddit}/submit"
+            print(f"Navigating to {submit_url}...")
+            page.goto(submit_url, wait_until='domcontentloaded', timeout=30_000)
+            self._human_delay(1500, 3000)
+
+            # Step 2: Check if redirected to login
+            if '/login' in page.url or '/register' in page.url:
+                raise RuntimeError(
+                    "Reddit session expired. Run 'python tools/reddit_login.py' to log in."
+                )
+
+            # Step 3: The "Post" (text) tab is the default, but click it to be safe
+            print("Selecting text post tab...")
+            try:
+                text_tab = page.locator('[role="tab"]:has-text("Post")').first
+                if text_tab.is_visible(timeout=3000):
+                    self._human_click(text_tab)
+                    self._human_delay(800, 1500)
+            except (PlaywrightTimeout, Exception):
+                pass  # Already on the text tab
+
+            # Step 4: Enter title
+            print(f"Entering title: {title}")
+            title_input = page.locator(
+                'textarea[name="title"], '
+                'input[name="title"], '
+                '[contenteditable="true"][aria-label*="title" i], '
+                '[placeholder*="Title"]'
+            ).first
+            title_input.wait_for(state='visible', timeout=10_000)
+            self._human_type(page, title_input, title)
+            self._human_delay(500, 1200)
+
+            # Step 5: Enter body text in the rich text editor
+            # The editor is a web component (shreddit-composer) with shadow DOM.
+            # The slotted contenteditable div is invisible to Playwright, but the
+            # shreddit-composer element itself IS visible. We click its center
+            # coordinates with page.mouse.click() to focus the editor.
+            print("Entering body text...")
+
+            # Get bounding rect of the body shreddit-composer
+            rect = page.evaluate('''() => {
+                const composers = document.querySelectorAll('shreddit-composer');
+                for (const c of composers) {
+                    if (c.offsetWidth > 0 && c.offsetHeight > 0) {
+                        const r = c.getBoundingClientRect();
+                        return { x: r.x, y: r.y, w: r.width, h: r.height };
+                    }
+                }
+                return null;
+            }''')
+            if not rect:
+                raise RuntimeError("Could not find body text editor on page.")
+
+            # Click at the center of the body editor area
+            center_x = rect['x'] + rect['w'] / 2
+            center_y = rect['y'] + rect['h'] / 2
+            page.mouse.click(center_x, center_y)
+            self._human_delay(500, 1000)
+
+            # Type the body text via keyboard
+            for char in body:
+                page.keyboard.type(char, delay=random.randint(30, 120))
+                if random.random() < 0.05:
+                    self._human_delay(200, 600)
+            self._human_delay(800, 1500)
+
+            # Step 6: Handle flair
+            print("Checking flair options...")
+            selected_flair = self._handle_flair(page, flair)
+            self._human_delay(400, 900)
+
+            # Step 7: Mark NSFW if needed
+            if nsfw:
+                try:
+                    nsfw_toggle = page.locator('button:has-text("NSFW")').first
+                    if nsfw_toggle.is_visible(timeout=3000):
+                        self._human_click(nsfw_toggle)
+                except (PlaywrightTimeout, Exception):
+                    print("Warning: Could not set NSFW flag.")
+
+            # Step 8: Click Post button
+            print("Submitting post...")
+            self._human_delay(800, 2000)
+            post_button = page.locator('button:has-text("Post")').last
+            self._human_click(post_button)
+
+            # Step 9: Wait for post creation (with flair-required retry)
+            print("Waiting for post to be created...")
+            try:
+                page.wait_for_url(
+                    lambda url: '/comments/' in url or 'created=' in url,
+                    timeout=15_000
+                )
+            except PlaywrightTimeout:
+                if not selected_flair and self._detect_flair_required_error(page):
+                    print("Flair is required! Attempting to auto-select flair...")
+                    self._human_delay(500, 1200)
+                    retry_flair = self._handle_flair(page, flair)
+                    if retry_flair:
+                        self._human_delay(600, 1500)
+                        post_button = page.locator('button:has-text("Post")').last
+                        self._human_click(post_button)
+                        page.wait_for_url(
+                            lambda url: '/comments/' in url or 'created=' in url,
+                            timeout=60_000
+                        )
+                    else:
+                        raise RuntimeError(
+                            f"Subreddit r/{subreddit} requires flair but no options available."
+                        )
+                else:
+                    page.wait_for_url(
+                        lambda url: '/comments/' in url or 'created=' in url,
+                        timeout=45_000
+                    )
+
+            post_url = self._extract_post_url(page, subreddit)
+            print(f"Post created: {post_url}")
+            return post_url
+
+        except PlaywrightTimeout as e:
             screenshot_path = self.session_dir / 'error_screenshot.png'
             try:
                 page.screenshot(path=str(screenshot_path))
