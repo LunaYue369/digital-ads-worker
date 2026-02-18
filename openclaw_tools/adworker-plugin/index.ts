@@ -125,6 +125,108 @@ export default function register(api: any) {
   });
 
   // ========================================================================
+  // make_ad_image 工具：生成AI图片
+  // ========================================================================
+  api.registerTool({
+    name: "make_ad_image",
+    description:
+      "使用Seedream AI从中文prompt生成广告图片，支持文生图、图生图（单图/多图参考）、组图生成",
+    parameters: {
+      type: "object",
+      required: ["prompt"],
+      properties: {
+        prompt: {
+          type: "string",
+          description:
+            "中文图片描述prompt，由clawdbot根据用户需求生成的详细画面描述",
+        },
+        image: {
+          type: "string",
+          description:
+            "参考图路径，多张用逗号分隔（可选）。支持本地文件路径或URL",
+        },
+        size: {
+          type: "string",
+          description:
+            "图片尺寸: 2K/4K/宽x高像素（如2048x2048），默认2K",
+        },
+        watermark: {
+          type: "boolean",
+          description: "是否添加水印，默认false",
+        },
+        multi: {
+          type: "boolean",
+          description: "是否生成组图（多张关联图片），默认false",
+        },
+        max_images: {
+          type: "number",
+          description: "组图数量，默认4，multi=true时有效",
+        },
+      },
+    },
+    async execute(_toolCallId: string, params: any) {
+      const { prompt, image, size, watermark, multi, max_images } = params;
+
+      try {
+        console.log(`\n🚀 开始生成AI图片`);
+
+        const args = ["--prompt", prompt];
+        if (image !== undefined) {
+          // 支持逗号分隔的多张图
+          const images = image.split(",").map((s: string) => s.trim());
+          for (const img of images) {
+            args.push("--image", img);
+          }
+        }
+        if (size !== undefined) {
+          args.push("--size", size);
+        }
+        if (watermark !== undefined) {
+          args.push("--watermark", String(watermark));
+        }
+        if (multi !== undefined) {
+          args.push("--multi", String(multi));
+        }
+        if (max_images !== undefined) {
+          args.push("--max_images", String(max_images));
+        }
+
+        const result = await runPythonScript(
+          `${ROOT}/tools/make_ad_image.py`,
+          args,
+          5 * 60 * 1000 // 5分钟超时
+        );
+
+        if (result.exitCode !== 0) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `❌ 图片生成失败:\n${result.stderr || result.stdout}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: `✅ 图片生成完成!\n\n${result.stdout}`,
+            },
+          ],
+        };
+      } catch (error) {
+        return {
+          content: [{ type: "text", text: `❌ 错误: ${error.message}` }],
+          isError: true,
+        };
+      }
+    },
+  });
+
+  // ========================================================================
   // publish_youtube 工具：发布视频到YouTube
   // ========================================================================
   api.registerTool({
