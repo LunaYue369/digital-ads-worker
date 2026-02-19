@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Seedance 1.0 Pro Fast API Client for Video Generation
-火山引擎 Seedance 视频生成客户端
+Seedance 1.5 Pro API Client for Video Generation
+火山引擎 Seedance 视频生成客户端（支持音画同步、多语言对白、环境音效、BGM）
 
 Based on official API documentation:
 https://www.volcengine.com/docs/82379/1520757
@@ -21,15 +21,17 @@ load_dotenv()
 
 class SeedanceClient:
     """
-    火山引擎 Seedance 视频生成API客户端
+    火山引擎 Seedance 1.5 Pro 视频生成API客户端
+
+    支持音画同步：环境音、动作音、BGM、人声对白（多语言/方言）
+    提示词公式：主体+运动+环境+运镜/切镜+美学描述+声音
 
     使用方式:
         client = SeedanceClient(api_key=os.getenv('VOLCENGINE_API_KEY'))
-        video_path = client.generate_video_from_image(
-            image_path='path/to/image.jpg',
-            prompt='产品特写镜头，缓慢旋转展示细节',
-            duration=3,
-            output_path='output.mp4'
+        video_path = client.generate_video_from_text(
+            prompt='一位女性用温暖的声音说："欢迎回家。"背景是柔和的钢琴BGM',
+            output_path=Path('output.mp4'),
+            duration=5
         )
     """
 
@@ -90,7 +92,8 @@ class SeedanceClient:
         resolution: str = None,
         ratio: str = None,
         watermark: bool = False,
-        seed: int = -1
+        seed: int = -1,
+        camera_fixed: bool = None
     ) -> str:
         """
         创建视频生成任务（异步）
@@ -105,6 +108,7 @@ class SeedanceClient:
             ratio: 宽高比 (16:9/4:3/1:1/3:4/9:16/21:9)
             watermark: 是否添加水印
             seed: 随机种子 (-1表示随机)
+            camera_fixed: 是否固定镜头（None=不设置，由模型自动判断）
 
         Returns:
             task_id: 任务唯一ID
@@ -121,6 +125,8 @@ class SeedanceClient:
             "watermark": watermark,
             "seed": seed
         }
+        if camera_fixed is not None:
+            payload["camera_fixed"] = camera_fixed
 
         print(f"📤 创建视频生成任务...")
         print(f"   模型: {self.model}")
@@ -362,18 +368,26 @@ class SeedanceClient:
         resolution: str = None,
         ratio: str = None,
         watermark: bool = False,
+        camera_fixed: bool = None,
         timeout: int = 300
     ) -> Path:
         """
-        从文本生成视频（文生视频 t2v
+        从文本生成视频（文生视频 t2v）
+
+        Seedance 1.5 Pro 支持在 prompt 中描述声音元素：
+        - 人声对白（多语言/方言，口型同步）
+        - 环境音效（雨声、爆炸、脚步等）
+        - 背景音乐（交响乐、吉他、流行等）
+        - 画外音（旁白配音）
 
         Args:
-            prompt: 视频生成提示词
+            prompt: 视频生成提示词（可包含声音/对白描述）
             output_path: 输出视频路径
             duration: 视频时长（秒），2-12秒
             resolution: 分辨率
             ratio: 宽高比
             watermark: 是否添加水印
+            camera_fixed: 是否固定镜头（None=模型自动判断）
             timeout: 最大等待时间（秒）
 
         Returns:
@@ -382,8 +396,8 @@ class SeedanceClient:
         Example:
             client = SeedanceClient(api_key="xxx")
             video_path = client.generate_video_from_text(
-                prompt='一只猫对着镜头打哈欠',
-                output_path=Path('cat_yawn.mp4'),
+                prompt='一位女性对着镜头说："这杯咖啡真好喝。"背景是温馨的咖啡店，轻柔的爵士乐作为BGM',
+                output_path=Path('coffee_ad.mp4'),
                 duration=5
             )
         """
@@ -399,7 +413,8 @@ class SeedanceClient:
             duration=duration,
             resolution=resolution,
             ratio=ratio,
-            watermark=watermark
+            watermark=watermark,
+            camera_fixed=camera_fixed
         )
 
         # 2. 等待完成
@@ -432,7 +447,7 @@ def test_api():
         print("❌ 请设置环境变量: export VOLCENGINE_API_KEY=your_key")
         return
 
-    print("🧪 测试 Seedance API...")
+    print("🧪 测试 Seedance 1.5 Pro API...")
     print(f"   API Key: {api_key[:10]}...{api_key[-4:]}\n")
 
     client = SeedanceClient(api_key=api_key)
