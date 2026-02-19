@@ -12,6 +12,7 @@ env/
 
 # 运行数据
 runs/
+data/
 
 # 系统文件
 .DS_Store

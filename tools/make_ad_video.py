@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-AI广告视频生成器 - 火山引擎 Seedance
-直接接收中文prompt生成视频
+AI广告视频生成器 - 火山引擎 Seedance 1.5 Pro
+直接接收中文prompt生成视频（支持音画同步：对白、音效、BGM）
 
 Usage:
-    python tools/make_ad_video.py --prompt "中文视频描述" [--duration 12] [--ratio 16:9] [--watermark false]
+    python tools/make_ad_video.py --prompt "中文视频描述" [--duration 12] [--ratio 16:9] [--watermark false] [--camera_fixed false]
 
 要求:
     - .env 文件中配置 VOLCENGINE_API_KEY
@@ -32,6 +32,7 @@ def main():
     parser.add_argument('--duration', type=int, default=12, help='视频时长（秒），2-12')
     parser.add_argument('--ratio', default='16:9', help='画面比例，如16:9/9:16/1:1')
     parser.add_argument('--watermark', default='false', help='是否添加水印，true/false')
+    parser.add_argument('--camera_fixed', default=None, help='是否固定镜头，true/false（不指定则由模型自动判断）')
 
     args = parser.parse_args()
 
@@ -40,6 +41,9 @@ def main():
     duration = min(max(args.duration, 2), 12)  # 限制2-12秒
     ratio = args.ratio
     watermark = args.watermark.lower() == 'true'
+    camera_fixed = None
+    if args.camera_fixed is not None:
+        camera_fixed = args.camera_fixed.lower() == 'true'
 
     # 创建运行目录
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -47,7 +51,7 @@ def main():
     run_dir.mkdir(parents=True, exist_ok=True)
 
     print(f"\n{'='*60}")
-    print("🎬 AI广告视频生成器 - Powered by Seedance")
+    print("🎬 AI广告视频生成器 - Powered by Seedance 1.5 Pro")
     print(f"{'='*60}\n")
 
     print(f"📝 Prompt: {prompt[:100]}{'...' if len(prompt) > 100 else ''}")
@@ -77,6 +81,7 @@ def main():
             duration=duration,
             ratio=ratio,
             watermark=watermark,
+            camera_fixed=camera_fixed,
             timeout=300  # 5分钟超时
         )
 

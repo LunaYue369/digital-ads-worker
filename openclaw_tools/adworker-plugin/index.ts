@@ -47,7 +47,7 @@ export default function register(api: any) {
   api.registerTool({
     name: "make_ad_video",
     description:
-      "使用Seedance AI从中文prompt直接生成广告视频（2-12秒）",
+      "使用Seedance 1.5 Pro AI从中文prompt生成广告视频（2-12秒），支持音画同步：对白（多语言/方言口型同步）、环境音效、BGM、画外音",
     parameters: {
       type: "object",
       required: ["prompt"],
@@ -55,7 +55,7 @@ export default function register(api: any) {
         prompt: {
           type: "string",
           description:
-            "中文视频描述prompt，由clawdbot根据用户需求生成的详细画面描述",
+            "中文视频描述prompt，包含画面描述和声音描述（对白、音效、BGM等）",
         },
         duration: {
           type: "number",
@@ -70,10 +70,14 @@ export default function register(api: any) {
           type: "boolean",
           description: "是否添加水印，默认false",
         },
+        camera_fixed: {
+          type: "boolean",
+          description: "是否固定镜头，默认由模型自动判断",
+        },
       },
     },
     async execute(_toolCallId: string, params: any) {
-      const { prompt, duration, ratio, watermark } = params;
+      const { prompt, duration, ratio, watermark, camera_fixed } = params;
 
       try {
         console.log(`\n🚀 开始生成AI视频`);
@@ -87,6 +91,9 @@ export default function register(api: any) {
         }
         if (watermark !== undefined) {
           args.push("--watermark", String(watermark));
+        }
+        if (camera_fixed !== undefined) {
+          args.push("--camera_fixed", String(camera_fixed));
         }
 
         const result = await runPythonScript(
@@ -400,6 +407,197 @@ export default function register(api: any) {
             {
               type: "text",
               text: `✅ Reddit发布完成!\n\n${result.stdout}`,
+            },
+          ],
+        };
+      } catch (error) {
+        return {
+          content: [{ type: "text", text: `❌ 错误: ${error.message}` }],
+          isError: true,
+        };
+      }
+    },
+  });
+
+  // ========================================================================
+  // biz_save_summary 工具：保存商业分析摘要到本地
+  // ========================================================================
+  api.registerTool({
+    name: "biz_save_summary",
+    description:
+      "将商业分析摘要保存到本地JSON文件。每7天调用一次，存储分析后的KPI、趋势和建议，不是原始对话",
+    parameters: {
+      type: "object",
+      required: ["industry", "period_start", "period_end", "summary", "kpis"],
+      properties: {
+        industry: {
+          type: "string",
+          description:
+            "行业标识，如: seafood_restaurant, noodle_shop, car_dealer, real_estate, ecommerce",
+        },
+        period_start: {
+          type: "string",
+          description: "周期开始日期，格式 YYYY-MM-DD",
+        },
+        period_end: {
+          type: "string",
+          description: "周期结束日期，格式 YYYY-MM-DD",
+        },
+        summary: {
+          type: "string",
+          description: "这段时间的整体分析总结（2-3句话）",
+        },
+        kpis: {
+          type: "string",
+          description:
+            "关键指标JSON字符串，如: {\"total_revenue\": 199500, \"avg_daily\": 28500}",
+        },
+        trends: {
+          type: "string",
+          description: "趋势分析文字描述",
+        },
+        recommendations: {
+          type: "string",
+          description:
+            "建议列表JSON数组，如: [\"减少帝王蟹备货30%\", \"推出春季套餐\"]",
+        },
+      },
+    },
+    async execute(_toolCallId: string, params: any) {
+      const {
+        industry,
+        period_start,
+        period_end,
+        summary,
+        kpis,
+        trends,
+        recommendations,
+      } = params;
+
+      try {
+        console.log(`\n📊 保存商业分析摘要`);
+
+        const args = [
+          "--industry", industry,
+          "--period_start", period_start,
+          "--period_end", period_end,
+          "--summary", summary,
+          "--kpis", kpis,
+        ];
+        if (trends !== undefined) {
+          args.push("--trends", trends);
+        }
+        if (recommendations !== undefined) {
+          args.push("--recommendations", recommendations);
+        }
+
+        const result = await runPythonScript(
+          `${ROOT}/tools/biz_save_summary.py`,
+          args,
+          60 * 1000 // 1分钟超时
+        );
+
+        if (result.exitCode !== 0) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `❌ 保存失败:\n${result.stderr || result.stdout}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: `✅ 分析摘要已保存!\n\n${result.stdout}`,
+            },
+          ],
+        };
+      } catch (error) {
+        return {
+          content: [{ type: "text", text: `❌ 错误: ${error.message}` }],
+          isError: true,
+        };
+      }
+    },
+  });
+
+  // ========================================================================
+  // biz_query_history 工具：查询历史商业分析数据
+  // ========================================================================
+  api.registerTool({
+    name: "biz_query_history",
+    description:
+      "查询本地存储的历史商业分析数据。当需要跨session对比历史数据时使用",
+    parameters: {
+      type: "object",
+      required: [],
+      properties: {
+        last_n: {
+          type: "number",
+          description: "返回最近N条记录，默认4",
+        },
+        industry: {
+          type: "string",
+          description: "按行业过滤，如: seafood_restaurant",
+        },
+        keyword: {
+          type: "string",
+          description: "搜索关键词，在摘要、趋势、建议中搜索",
+        },
+        period: {
+          type: "string",
+          description: "查询特定周期，如: 2026-W08",
+        },
+      },
+    },
+    async execute(_toolCallId: string, params: any) {
+      const { last_n, industry, keyword, period } = params;
+
+      try {
+        console.log(`\n📊 查询历史商业数据`);
+
+        const args: string[] = [];
+        if (last_n !== undefined) {
+          args.push("--last_n", String(last_n));
+        }
+        if (industry !== undefined) {
+          args.push("--industry", industry);
+        }
+        if (keyword !== undefined) {
+          args.push("--keyword", keyword);
+        }
+        if (period !== undefined) {
+          args.push("--period", period);
+        }
+
+        const result = await runPythonScript(
+          `${ROOT}/tools/biz_query_history.py`,
+          args,
+          30 * 1000 // 30秒超时
+        );
+
+        if (result.exitCode !== 0) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `❌ 查询失败:\n${result.stderr || result.stdout}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: result.stdout,
             },
           ],
         };
