@@ -3,7 +3,7 @@
 发布视频到 YouTube
 
 Usage:
-    python tools/publish_youtube.py --video_path runs/xxx/final.mp4 --title "视频标题" \
+    python tools/youtube/publish_youtube.py --video_path data/media/xxx/final.mp4 --title "视频标题" \
         [--description "描述"] [--tags "tag1,tag2"] [--privacy private]
 
 要求:

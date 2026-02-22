@@ -4,7 +4,7 @@ AI广告视频生成器 - 火山引擎 Seedance 1.5 Pro
 直接接收中文prompt生成视频（支持音画同步：对白、音效、BGM）
 
 Usage:
-    python tools/make_ad_video.py --prompt "中文视频描述" [--duration 12] [--ratio 16:9] [--watermark false] [--camera_fixed false]
+    python tools/video/make_ad_video.py --prompt "中文视频描述" [--duration 12] [--ratio 16:9] [--watermark false] [--camera_fixed false]
 
 要求:
     - .env 文件中配置 VOLCENGINE_API_KEY
@@ -47,7 +47,7 @@ def main():
 
     # 创建运行目录
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    run_dir = Path(f'runs/{timestamp}')
+    run_dir = Path(f'data/media/{timestamp}')
     run_dir.mkdir(parents=True, exist_ok=True)
 
     print(f"\n{'='*60}")
