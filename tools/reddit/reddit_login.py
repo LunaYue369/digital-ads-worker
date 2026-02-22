@@ -3,7 +3,7 @@
 Reddit Login Helper - Run once to establish browser session.
 
 Usage:
-    python tools/reddit_login.py
+    python tools/reddit/reddit_login.py
 
 Opens a Chromium browser window. Log in to Reddit manually.
 Close the browser when done. Session cookies will be saved.
@@ -52,7 +52,7 @@ def main():
     check = RedditBrowser(headless=True)
     if check.is_logged_in():
         print()
-        print("Login successful! Session saved to reddit_session/")
+        print("Login successful! Session saved to data/reddit_session/")
         print("You can now use publish_reddit without logging in again.")
     else:
         print()

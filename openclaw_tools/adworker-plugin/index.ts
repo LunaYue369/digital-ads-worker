@@ -4,6 +4,26 @@ import { spawn } from "child_process";
 const PYTHON = "/usr/bin/python3";
 const ROOT = "/Users/clawbot-runner/adworker";
 
+// ── Slack status DM ────────────────────────────────────────────────────────────
+// Posts a status message to the owner's DM during long-running tool execution.
+const SLACK_BOT_TOKEN    = "REDACTED";
+const SLACK_STATUS_CHANNEL = "D0AELN26HHS";   // owner DM channel
+
+async function postSlackStatus(text: string): Promise<void> {
+  try {
+    await fetch("https://slack.com/api/chat.postMessage", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${SLACK_BOT_TOKEN}`,
+      },
+      body: JSON.stringify({ channel: SLACK_STATUS_CHANNEL, text }),
+    });
+  } catch (_) {
+    // Non-critical — never block the tool if status post fails
+  }
+}
+
 async function runPythonScript(
   scriptPath: string,
   args: string[],
@@ -81,6 +101,7 @@ export default function register(api: any) {
 
       try {
         console.log(`\n🚀 开始生成AI视频`);
+        await postSlackStatus(`⏳ 正在生成 AI 视频，通常需要 3–8 分钟，请稍候...\nGenerating AI video, usually takes 3–8 mins — please wait...`);
 
         const args = ["--prompt", prompt];
         if (duration !== undefined) {
@@ -97,7 +118,7 @@ export default function register(api: any) {
         }
 
         const result = await runPythonScript(
-          `${ROOT}/tools/make_ad_video.py`,
+          `${ROOT}/tools/video/make_ad_video.py`,
           args,
           10 * 60 * 1000 // 10分钟超时
         );
@@ -176,6 +197,7 @@ export default function register(api: any) {
 
       try {
         console.log(`\n🚀 开始生成AI图片`);
+        await postSlackStatus(`⏳ 正在生成 AI 图片，请稍候...\nGenerating AI image, please wait...`);
 
         const args = ["--prompt", prompt];
         if (image !== undefined) {
@@ -199,7 +221,7 @@ export default function register(api: any) {
         }
 
         const result = await runPythonScript(
-          `${ROOT}/tools/make_ad_image.py`,
+          `${ROOT}/tools/image/make_ad_image.py`,
           args,
           5 * 60 * 1000 // 5分钟超时
         );
@@ -247,7 +269,7 @@ export default function register(api: any) {
         video_path: {
           type: "string",
           description:
-            "视频文件路径，通常是 runs/{timestamp}/final.mp4",
+            "视频文件路径，通常是 data/media/{timestamp}/final.mp4",
         },
         title: {
           type: "string",
@@ -274,6 +296,7 @@ export default function register(api: any) {
 
       try {
         console.log(`\n📤 发布视频到YouTube`);
+        await postSlackStatus(`⏳ 正在上传到 YouTube，请稍候...\nUploading to YouTube, please wait...`);
 
         const args = ["--video_path", video_path, "--title", title];
         if (description !== undefined) {
@@ -287,7 +310,7 @@ export default function register(api: any) {
         }
 
         const result = await runPythonScript(
-          `${ROOT}/tools/publish_youtube.py`,
+          `${ROOT}/tools/youtube/publish_youtube.py`,
           args,
           5 * 60 * 1000 // 5分钟超时
         );
@@ -366,6 +389,7 @@ export default function register(api: any) {
       try {
         const postType = video_path ? "媒体" : "文本";
         console.log(`\n📤 发布${postType}到Reddit r/${subreddit}`);
+        await postSlackStatus(`⏳ 正在发布到 Reddit r/${subreddit}，请稍候...\nPosting to Reddit r/${subreddit}, please wait...`);
 
         const args = [
           "--subreddit", subreddit,
@@ -385,7 +409,7 @@ export default function register(api: any) {
         }
 
         const result = await runPythonScript(
-          `${ROOT}/tools/publish_reddit.py`,
+          `${ROOT}/tools/reddit/publish_reddit.py`,
           args,
           5 * 60 * 1000 // 5分钟超时
         );
@@ -415,6 +439,262 @@ export default function register(api: any) {
           content: [{ type: "text", text: `❌ 错误: ${error.message}` }],
           isError: true,
         };
+      }
+    },
+  });
+
+  // ========================================================================
+  // biz_fetch_today 工具：读取 POS 近期营业数据
+  // ========================================================================
+  api.registerTool({
+    name: "biz_fetch_today",
+    description:
+      "从本地SQLite POS数据库读取近期营业数据，返回每日汇总、商品排行、小时分布、成本率和周同比。用于开始分析前快速获取店铺数据概览",
+    parameters: {
+      type: "object",
+      required: [],
+      properties: {
+        industry: {
+          type: "string",
+          description: "行业标识，如: seafood_restaurant（默认）",
+        },
+        date: {
+          type: "string",
+          description: "目标日期 YYYY-MM-DD（默认取数据库最新日期）",
+        },
+        days: {
+          type: "number",
+          description: "往前取几天数据，默认1（仅当天），最大90",
+        },
+      },
+    },
+    async execute(_toolCallId: string, params: any) {
+      const { industry, date, days } = params;
+      try {
+        console.log(`\n📊 读取 POS 营业数据`);
+        await postSlackStatus(`⏳ 正在读取营业数据...\nFetching business data...`);
+        const args: string[] = [];
+        if (industry !== undefined) args.push("--industry", industry);
+        if (date     !== undefined) args.push("--date",     date);
+        if (days     !== undefined) args.push("--days",     String(days));
+
+        const result = await runPythonScript(
+          `${ROOT}/tools/biz/biz_fetch_today.py`,
+          args,
+          30 * 1000
+        );
+
+        if (result.exitCode !== 0) {
+          return {
+            content: [{ type: "text", text: `❌ 读取失败:\n${result.stderr || result.stdout}` }],
+            isError: true,
+          };
+        }
+        return { content: [{ type: "text", text: result.stdout }] };
+      } catch (error) {
+        return { content: [{ type: "text", text: `❌ 错误: ${error.message}` }], isError: true };
+      }
+    },
+  });
+
+  // ========================================================================
+  // biz_query_raw 工具：按维度分组查询 POS 数据
+  // ========================================================================
+  api.registerTool({
+    name: "biz_query_raw",
+    description:
+      "对 POS SQLite 数据库执行分组聚合查询。可按商品、类别、日期、小时、星期、员工、支付方式、订单类型分组，返回营收/销量/成本等指标。用于精确回答老板的具体数据问题",
+    parameters: {
+      type: "object",
+      required: ["group_by"],
+      properties: {
+        group_by: {
+          type: "string",
+          enum: ["item", "category", "day", "hour", "weekday", "employee", "payment", "order_type"],
+          description: "分组维度",
+        },
+        industry: {
+          type: "string",
+          description: "行业标识，默认 seafood_restaurant",
+        },
+        date_from: {
+          type: "string",
+          description: "起始日期 YYYY-MM-DD（默认最近30天）",
+        },
+        date_to: {
+          type: "string",
+          description: "截止日期 YYYY-MM-DD（默认最新）",
+        },
+        limit: {
+          type: "number",
+          description: "返回行数上限，默认30",
+        },
+      },
+    },
+    async execute(_toolCallId: string, params: any) {
+      const { group_by, industry, date_from, date_to, limit } = params;
+      try {
+        console.log(`\n📊 POS 分组查询: ${group_by}`);
+        await postSlackStatus(`⏳ 正在查询数据（按 ${group_by} 分组）...\nQuerying database (grouped by ${group_by})...`);
+        const args = ["--group_by", group_by];
+        if (industry  !== undefined) args.push("--industry",  industry);
+        if (date_from !== undefined) args.push("--date_from", date_from);
+        if (date_to   !== undefined) args.push("--date_to",   date_to);
+        if (limit     !== undefined) args.push("--limit",     String(limit));
+
+        const result = await runPythonScript(
+          `${ROOT}/tools/biz/biz_query_raw.py`,
+          args,
+          30 * 1000
+        );
+
+        if (result.exitCode !== 0) {
+          return {
+            content: [{ type: "text", text: `❌ 查询失败:\n${result.stderr || result.stdout}` }],
+            isError: true,
+          };
+        }
+        return { content: [{ type: "text", text: result.stdout }] };
+      } catch (error) {
+        return { content: [{ type: "text", text: `❌ 错误: ${error.message}` }], isError: true };
+      }
+    },
+  });
+
+  // ========================================================================
+  // biz_update 工具：写操作 — 改价格/上下架/新增商品/录入交易/撤单
+  // ========================================================================
+  api.registerTool({
+    name: "biz_update",
+    description:
+      "对 POS 数据库执行写操作，修改后 dashboard 自动刷新反映变化。支持：update_price（改价）、toggle_item（上下架）、add_item（新增商品）、add_transaction（录入新交易）、void_last（撤销最近交易）、list_catalog（查看当前菜单/商品 ID）",
+    parameters: {
+      type: "object",
+      required: ["action"],
+      properties: {
+        action: {
+          type: "string",
+          enum: ["update_price", "toggle_item", "add_item",
+                 "add_transaction", "void_last", "list_catalog"],
+          description: "操作类型",
+        },
+        industry: {
+          type: "string",
+          description: "行业标识，默认 seafood_restaurant",
+        },
+        item_id: {
+          type: "string",
+          description: "商品 ID（update_price / toggle_item / add_item 必填）。不确定 ID 时先调 list_catalog",
+        },
+        price: {
+          type: "number",
+          description: "新售价（update_price 必填）",
+        },
+        cost: {
+          type: "number",
+          description: "新成本（update_price 可选）",
+        },
+        active: {
+          type: "string",
+          description: "true / false，上架或下架（toggle_item 必填）",
+        },
+        name: {
+          type: "string",
+          description: "商品名称（add_item 必填）",
+        },
+        category: {
+          type: "string",
+          description: "商品分类（add_item 必填）",
+        },
+        covers: {
+          type: "number",
+          description: "桌/人数（add_transaction 可选，默认随机1-4）",
+        },
+        employee_id: {
+          type: "string",
+          description: "员工/销售 ID（add_transaction 可选，如 sales_james）",
+        },
+        order_type: {
+          type: "string",
+          description: "订单类型（add_transaction 可选：dine_in / takeout / delivery / in_person 等）",
+        },
+        payment_method: {
+          type: "string",
+          description: "支付方式（add_transaction 可选：credit_card / cash / apple_pay 等）",
+        },
+        item_ids: {
+          type: "string",
+          description: "商品 ID，逗号分隔（add_transaction 可选，如 compact_suv,ext_warranty）",
+        },
+        subtotal: {
+          type: "number",
+          description: "税前小计（add_transaction 可选；提供后 discount/tax/tip/total 也应同时提供）",
+        },
+        discount: {
+          type: "number",
+          description: "折扣金额（add_transaction 可选，默认0）",
+        },
+        tax: {
+          type: "number",
+          description: "税额（add_transaction 可选，默认0）",
+        },
+        tip: {
+          type: "number",
+          description: "小费（add_transaction 可选，默认0）",
+        },
+        total: {
+          type: "number",
+          description: "实收总额（add_transaction 可选；不填则自动计算 subtotal - discount + tax + tip）",
+        },
+        n: {
+          type: "number",
+          description: "撤销最近几笔（void_last，默认1）",
+        },
+      },
+    },
+    async execute(_toolCallId: string, params: any) {
+      const { action, industry, item_id, price, cost, active,
+              name, category, covers, employee_id, order_type,
+              payment_method, item_ids, subtotal, discount, tax, tip, total,
+              n } = params;
+      try {
+        console.log(`\n✏️  POS 写操作: ${action}`);
+        await postSlackStatus(`⏳ 正在执行操作：${action}...\nExecuting: ${action}...`);
+        const args = ["--action", action];
+        if (industry        !== undefined) args.push("--industry",        industry);
+        if (item_id         !== undefined) args.push("--item_id",         item_id);
+        if (price           !== undefined) args.push("--price",           String(price));
+        if (cost            !== undefined) args.push("--cost",            String(cost));
+        if (active          !== undefined) args.push("--active",          active);
+        if (name            !== undefined) args.push("--name",            name);
+        if (category        !== undefined) args.push("--category",        category);
+        if (covers          !== undefined) args.push("--covers",          String(covers));
+        if (employee_id     !== undefined) args.push("--employee_id",     employee_id);
+        if (order_type      !== undefined) args.push("--order_type",      order_type);
+        if (payment_method  !== undefined) args.push("--payment_method",  payment_method);
+        if (item_ids        !== undefined) args.push("--item_ids",        item_ids);
+        if (subtotal        !== undefined) args.push("--subtotal",        String(subtotal));
+        if (discount        !== undefined) args.push("--discount",        String(discount));
+        if (tax             !== undefined) args.push("--tax",             String(tax));
+        if (tip             !== undefined) args.push("--tip",             String(tip));
+        if (total           !== undefined) args.push("--total",           String(total));
+        if (n               !== undefined) args.push("--n",              String(n));
+
+        const result = await runPythonScript(
+          `${ROOT}/tools/biz/biz_update.py`,
+          args,
+          30 * 1000
+        );
+
+        if (result.exitCode !== 0) {
+          return {
+            content: [{ type: "text", text: `❌ 操作失败:\n${result.stderr || result.stdout}` }],
+            isError: true,
+          };
+        }
+        return { content: [{ type: "text", text: result.stdout }] };
+      } catch (error) {
+        return { content: [{ type: "text", text: `❌ 错误: ${error.message}` }], isError: true };
       }
     },
   });
@@ -476,6 +756,7 @@ export default function register(api: any) {
 
       try {
         console.log(`\n📊 保存商业分析摘要`);
+        await postSlackStatus(`⏳ 正在保存分析摘要...\nSaving business summary...`);
 
         const args = [
           "--industry", industry,
@@ -492,7 +773,7 @@ export default function register(api: any) {
         }
 
         const result = await runPythonScript(
-          `${ROOT}/tools/biz_save_summary.py`,
+          `${ROOT}/tools/biz/biz_save_summary.py`,
           args,
           60 * 1000 // 1分钟超时
         );
@@ -560,6 +841,7 @@ export default function register(api: any) {
 
       try {
         console.log(`\n📊 查询历史商业数据`);
+        await postSlackStatus(`⏳ 正在查询历史数据...\nQuerying historical records...`);
 
         const args: string[] = [];
         if (last_n !== undefined) {
@@ -576,7 +858,7 @@ export default function register(api: any) {
         }
 
         const result = await runPythonScript(
-          `${ROOT}/tools/biz_query_history.py`,
+          `${ROOT}/tools/biz/biz_query_history.py`,
           args,
           30 * 1000 // 30秒超时
         );

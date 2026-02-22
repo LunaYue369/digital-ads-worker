@@ -5,10 +5,10 @@ Business Analyst - 查询历史商业分析数据
 从 data/business_reports/ 读取历史分析报告
 
 Usage:
-    python tools/biz_query_history.py --last_n 4
-    python tools/biz_query_history.py --industry seafood_restaurant --last_n 8
-    python tools/biz_query_history.py --keyword "帝王蟹"
-    python tools/biz_query_history.py --period 2026-W08
+    python tools/biz/biz_query_history.py --last_n 4
+    python tools/biz/biz_query_history.py --industry seafood_restaurant --last_n 8
+    python tools/biz/biz_query_history.py --keyword "帝王蟹"
+    python tools/biz/biz_query_history.py --period 2026-W08
 """
 import argparse
 import json
@@ -16,7 +16,7 @@ import sys
 from pathlib import Path
 
 
-DATA_DIR = Path(__file__).parent.parent / "data" / "business_reports"
+DATA_DIR = Path(__file__).parent.parent.parent / "data" / "business_reports"
 
 
 def load_reports(industry=None):

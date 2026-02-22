@@ -4,3 +4,9 @@ google-api-python-client>=2.0.0  # YouTube Data API
 google-auth-oauthlib>=1.0.0  # YouTube OAuth认证
 google-auth-httplib2>=0.2.0  # YouTube HTTP传输
 playwright>=1.40.0  # Reddit浏览器自动化
+
+# Business Analyst Dashboard
+streamlit>=1.32.0
+streamlit-autorefresh>=1.0.1
+plotly>=5.20.0
+pandas>=2.0.0
