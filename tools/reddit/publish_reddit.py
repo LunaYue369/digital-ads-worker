@@ -4,15 +4,15 @@ Publish to Reddit via browser automation.
 
 Usage:
     # Media post (video/image)
-    python tools/publish_reddit.py --video_path runs/xxx/final.mp4 \
+    python tools/reddit/publish_reddit.py --video_path data/media/xxx/final.mp4 \
         --subreddit testingground4bots --title "My Video"
 
     # Text-only post
-    python tools/publish_reddit.py --subreddit testingground4bots \
+    python tools/reddit/publish_reddit.py --subreddit testingground4bots \
         --title "My Post" --body "Post body text here..."
 
 Requirements:
-    - First run: python tools/reddit_login.py
+    - First run: python tools/reddit/reddit_login.py
     - playwright installed: pip install playwright && playwright install chromium
 """
 import argparse
@@ -42,7 +42,7 @@ def main():
     try:
         if not client.is_logged_in():
             print("Not logged in to Reddit.")
-            print("Run 'python tools/reddit_login.py' to log in first.")
+            print("Run 'python tools/reddit/reddit_login.py' to log in first.")
             sys.exit(1)
 
         if args.video_path:

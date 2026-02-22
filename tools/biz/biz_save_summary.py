@@ -5,7 +5,7 @@ Business Analyst - 保存商业分析摘要到本地 JSON
 将 clawdbot 的分析结果保存到 data/business_reports/{industry}/YYYY-W##.json
 
 Usage:
-    python tools/biz_save_summary.py \
+    python tools/biz/biz_save_summary.py \
         --industry seafood_restaurant \
         --period_start 2026-02-11 \
         --period_end 2026-02-18 \
@@ -21,7 +21,7 @@ from datetime import datetime
 from pathlib import Path
 
 
-DATA_DIR = Path(__file__).parent.parent / "data" / "business_reports"
+DATA_DIR = Path(__file__).parent.parent.parent / "data" / "business_reports"
 
 
 def main():

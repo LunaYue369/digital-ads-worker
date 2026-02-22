@@ -4,19 +4,19 @@ AI广告图片生成器 - 火山引擎 Seedream
 
 Usage:
     # 文生图
-    python tools/make_ad_image.py --prompt "咖啡广告海报，暖色调"
+    python tools/image/make_ad_image.py --prompt "咖啡广告海报，暖色调"
 
     # 图生图（单张参考图）
-    python tools/make_ad_image.py --prompt "将背景改为海滩" --image input.jpg
+    python tools/image/make_ad_image.py --prompt "将背景改为海滩" --image input.jpg
 
     # 多图融合
-    python tools/make_ad_image.py --prompt "将图1的服装换为图2的服装" --image model.jpg --image dress.jpg
+    python tools/image/make_ad_image.py --prompt "将图1的服装换为图2的服装" --image model.jpg --image dress.jpg
 
     # 文生组图
-    python tools/make_ad_image.py --prompt "四季庭院插画" --multi true --max_images 4
+    python tools/image/make_ad_image.py --prompt "四季庭院插画" --multi true --max_images 4
 
     # 图生组图
-    python tools/make_ad_image.py --prompt "人物四个不同场景" --image character.jpg --multi true --max_images 4
+    python tools/image/make_ad_image.py --prompt "人物四个不同场景" --image character.jpg --multi true --max_images 4
 
 要求:
     - .env 文件中配置 VOLCENGINE_API_KEY
@@ -57,7 +57,7 @@ def main():
 
     # 创建运行目录
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    run_dir = Path(f'runs/{timestamp}')
+    run_dir = Path(f'data/media/{timestamp}')
     run_dir.mkdir(parents=True, exist_ok=True)
 
     # 确定模式

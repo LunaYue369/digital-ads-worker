@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Optional, List
 from playwright.sync_api import sync_playwright, Page, TimeoutError as PlaywrightTimeout
 
-SESSION_DIR_DEFAULT = Path(__file__).parent.parent / 'reddit_session'
+SESSION_DIR_DEFAULT = Path(__file__).parent.parent.parent / 'data' / 'reddit_session'
 REDDIT_BASE = 'https://www.reddit.com'
 
 
@@ -484,7 +484,7 @@ class RedditBrowser:
             # Step 2: Check if redirected to login
             if '/login' in page.url or '/register' in page.url:
                 raise RuntimeError(
-                    "Reddit session expired. Run 'python tools/reddit_login.py' to log in."
+                    "Reddit session expired. Run 'python tools/reddit/reddit_login.py' to log in."
                 )
 
             # Step 3: Select Images & Video tab
@@ -621,7 +621,7 @@ class RedditBrowser:
             # Step 2: Check if redirected to login
             if '/login' in page.url or '/register' in page.url:
                 raise RuntimeError(
-                    "Reddit session expired. Run 'python tools/reddit_login.py' to log in."
+                    "Reddit session expired. Run 'python tools/reddit/reddit_login.py' to log in."
                 )
 
             # Step 3: The "Post" (text) tab is the default, but click it to be safe

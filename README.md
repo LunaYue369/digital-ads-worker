@@ -13,13 +13,13 @@ python3 -m pip install -r requirements.txt
 - Create OAuth client ID (Desktop), download `client_secrets.json` to repo root
 
 3) Example run flow:
-- Place your assets and generated `storyboard.json` into `runs/<run_id>/`
+- Place your assets and generated `storyboard.json` into `data/media/<run_id>/`
 - From repo root:
 ```bash
-python tools/make_ad_video.py runs/<run_id>
-python tools/publish_youtube.py runs/<run_id>/final.mp4 --title "My Ad" --desc "desc"
+python tools/video/make_ad_video.py data/media/<run_id>
+python tools/youtube/publish_youtube.py data/media/<run_id>/final.mp4 --title "My Ad" --desc "desc"
 ```
 
 4) Next steps to integrate with OpenClaw:
-- Add `tools/make_ad_video.py` and `tools/publish_youtube.py` as OpenClaw tools
+- Add `tools/video/make_ad_video.py` and `tools/youtube/publish_youtube.py` as OpenClaw tools
 - Create an agent that writes `storyboard.json` and calls these tools

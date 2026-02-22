@@ -29,14 +29,14 @@ class SeedreamClient:
         # 文生图
         paths = client.text_to_image(
             prompt='咖啡广告海报，暖色调，写实风格',
-            output_dir=Path('runs/20260217_120000')
+            output_dir=Path('data/media/20260217_120000')
         )
 
         # 图生图
         paths = client.image_to_image(
             prompt='将背景改为海滩',
             image_paths=[Path('input.jpg')],
-            output_dir=Path('runs/20260217_120000')
+            output_dir=Path('data/media/20260217_120000')
         )
     """
 
@@ -399,7 +399,7 @@ def test_api():
     测试API是否正常工作
 
     使用方式:
-        python3 tools/seedream_client.py
+        python3 tools/image/seedream_client.py
     """
     api_key = os.getenv('VOLCENGINE_API_KEY')
     if not api_key:
