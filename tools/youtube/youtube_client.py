@@ -44,7 +44,7 @@ class YouTubeClient:
             client_secret_path: OAuth client_secret.json 文件路径
             token_path: token.pickle 保存路径
         """
-        root = Path(__file__).parent.parent
+        root = Path(__file__).parent.parent.parent
         self.client_secret_path = Path(client_secret_path or root / 'client_secret.json')
         self.token_path = Path(token_path or root / 'token.pickle')
 

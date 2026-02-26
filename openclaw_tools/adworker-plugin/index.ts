@@ -1,13 +1,13 @@
 // @ts-nocheck
 import { spawn } from "child_process";
 
-const PYTHON = "/usr/bin/python3";
+const PYTHON = "/Users/clawbot-runner/adworker/venv/bin/python3";
 const ROOT = "/Users/clawbot-runner/adworker";
 
 // ── Slack status DM ────────────────────────────────────────────────────────────
 // Posts a status message to the owner's DM during long-running tool execution.
 const SLACK_BOT_TOKEN    = "REDACTED_BOT_TOKEN";
-const SLACK_STATUS_CHANNEL = "D0AELN26HHS";   // owner DM channel
+const SLACK_STATUS_CHANNEL = "C0AJ332T19N";   // owner DM channel
 
 async function postSlackStatus(text: string): Promise<void> {
   try {
