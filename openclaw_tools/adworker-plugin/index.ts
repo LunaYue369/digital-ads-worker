@@ -6,7 +6,7 @@ const ROOT = "/Users/clawbot-runner/adworker";
 
 // ── Slack status DM ────────────────────────────────────────────────────────────
 // Posts a status message to the owner's DM during long-running tool execution.
-const SLACK_BOT_TOKEN    = "REDACTED";
+const SLACK_BOT_TOKEN    = process.env.SLACK_BOT_TOKEN || "";
 const SLACK_STATUS_CHANNEL = "D0AELN26HHS";   // owner DM channel
 
 async function postSlackStatus(text: string): Promise<void> {
