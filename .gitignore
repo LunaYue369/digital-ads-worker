@@ -32,3 +32,4 @@ token.pickle
 
 # Reddit浏览器会话（包含登录cookie）
 reddit_session/
+.venv/

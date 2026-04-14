@@ -1,8 +1,8 @@
 // @ts-nocheck
 import { spawn } from "child_process";
 
-const PYTHON = "/usr/bin/python3";
-const ROOT = "/Users/clawbot-runner/adworker";
+const PYTHON = "C:\\Users\\Luna\\repos\\digital-ads-worker\\.venv\\Scripts\\python.exe";
+const ROOT = "C:\\Users\\Luna\\repos\\digital-ads-worker";
 
 // ── Slack status DM ────────────────────────────────────────────────────────────
 // Posts a status message to the owner's DM during long-running tool execution.
